@@ -3,6 +3,36 @@ from pydantic import BaseModel
 from google.cloud import storage
 import joblib
 import os
+import sys
+import numpy as np
+
+
+def transform_features(X):
+    """
+    Hàm biến đổi 12 đặc trưng ban đầu thành 19 đặc trưng bằng Feature Engineering.
+    """
+    if hasattr(X, "values"):
+        X = X.values
+    X = np.asarray(X, dtype=float)
+    if X.ndim == 1:
+        X = X.reshape(1, -1)
+    
+    total_acidity = (X[:, 0] + X[:, 1] + X[:, 2]).reshape(-1, 1)
+    bound_so2 = (X[:, 6] - X[:, 5]).reshape(-1, 1)
+    so2_ratio = (X[:, 5] / (X[:, 6] + 1e-5)).reshape(-1, 1)
+    sugar_alcohol = (X[:, 3] / (X[:, 10] + 1e-5)).reshape(-1, 1)
+    alcohol_density = (X[:, 10] / (X[:, 7] + 1e-5)).reshape(-1, 1)
+    acid_ph = (X[:, 0] / (X[:, 8] + 1e-5)).reshape(-1, 1)
+    sulphate_alcohol = (X[:, 9] * X[:, 10]).reshape(-1, 1)
+    
+    return np.hstack([X, total_acidity, bound_so2, so2_ratio, sugar_alcohol, alcohol_density, acid_ph, sulphate_alcohol])
+
+
+# Gán vào module hiện tại và __main__ để pickle/unpickle tìm thấy hàm
+sys.modules[__name__].transform_features = transform_features
+if "__main__" in sys.modules:
+    sys.modules["__main__"].transform_features = transform_features
+
 
 app = FastAPI(title="Wine Quality Inference API")
 
