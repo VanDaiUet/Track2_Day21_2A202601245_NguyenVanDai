@@ -1,3 +1,6 @@
-model_type: random_forest
-n_estimators: 20
-max_depth: 3
+model_type: extra_trees
+use_feature_engineering: true
+n_estimators: 350
+max_depth: 25
+criterion: entropy
+random_state: 47
