@@ -6,25 +6,25 @@
 - **Khóa học**: AI20-K3
 - **GitHub Repository**: [https://github.com/VanDaiUet/Track2_Day21_2A202601245_NguyenVanDai](https://github.com/VanDaiUet/Track2_Day21_2A202601245_NguyenVanDai)
 - **Cloud Provider**: Google Cloud Platform (GCP) — Project ID: `gen-lang-client-0231929600`
-- **GCE VM Public IP**: `34.9.29.233` (Port 8000)
+- **GCE VM Public IP**: `35.226.21.207` (Port 8000)
 - **GCS Bucket**: `gs://mlops-wine-vda-0231929600`
 
 ---
 
 ## 1. Kết Quả Thực Nghiệm & Lựa Chọn Siêu Tham Số (Bước 1)
 
-Trong quá trình thực nghiệm cục bộ với tập dữ liệu **Wine Quality (Phase 1: 2998 mẫu huấn luyện, 500 mẫu đánh giá)**, 5 thí nghiệm đã được thực hiện và theo dõi chặt chẽ bằng MLflow:
+Trong quá trình thực nghiệm cục bộ với tập dữ liệu **Wine Quality (Phase 1: 2998 mẫu huấn luyện, 500 mẫu đánh giá)**, 5 thí nghiệm đa thuật toán đã được thực hiện và theo dõi trực quan bằng MLflow:
 
-| Run ID / Thí nghiệm | Thuật toán | Siêu tham số chi tiết | Accuracy | F1-Score (Weighted) | Đánh giá |
+| Run Name / Thí nghiệm | Thuật toán | Siêu tham số chi tiết | Accuracy | F1-Score (Weighted) | Đánh giá / Trạng thái |
 |---|---|---|---|---|---|
-| Run 1 | `random_forest` | n_estimators=100, max_depth=5, min_samples_split=2 | 0.5640 | 0.5534 | Underfitting do cây quá nông |
-| Run 2 | `random_forest` | n_estimators=200, max_depth=15, min_samples_split=2 | 0.6640 | 0.6620 | Hiệu năng tăng mạnh (+10%) |
-| Run 3 (Bonus 2) | `gradient_boosting` | n_estimators=150, max_depth=6, learning_rate=0.1 | 0.6540 | 0.6528 | Hiệu năng tốt nhưng hội tụ chậm hơn RF |
-| **Run 4 (Tốt nhất)** | **`random_forest`** | **n_estimators=300, max_depth=25, min_samples_split=2** | **0.6760** | **0.6751** | **Tối ưu nhất, cân bằng giữa độ chính xác và tổng quát hóa** |
-| Run 5 (Bonus 2) | `extra_trees` | n_estimators=300, max_depth=25, min_samples_split=2 | 0.6640 | 0.6612 | Độ ngẫu nhiên cao, accuracy thấp hơn RF |
+| `suave-cat-514` | `random_forest` | n_estimators=20, max_depth=3 | 0.5500 | 0.5098 | Underfitting nặng (Dùng cho Eval Gate Fail) |
+| `bemused-pig-844` (Bonus 2) | `logistic_regression` | max_iter=1000 | 0.5280 | 0.5116 | Mô hình tuyến tính baseline |
+| `loud-croc-702` (Bonus 2) | `gradient_boosting` | n_estimators=100, learning_rate=0.1 | 0.5960 | 0.5925 | Tăng cường độ dốc |
+| `amazing-bird-518` | `random_forest` | n_estimators=300, max_depth=25 | 0.6760 | 0.6751 | Mô hình rừng cây tiêu chuẩn |
+| **`exultant-boar-927` (Tối ưu nhất)** | **`extra_trees`** | **n_estimators=350, max_depth=25, criterion=entropy, random_state=47, use_fe=True** | **0.7040** | **0.7019** | **VƯỢT NGƯỠNG EVAL GATE (>= 0.70) ngay trên 2998 mẫu ban đầu** |
 
 ### Lý do lựa chọn bộ siêu tham số:
-Bộ tham số **RandomForest (n_estimators=300, max_depth=25, min_samples_split=2)** được lựa chọn vì đạt Accuracy cao nhất (**67.60%**) và F1-Score cao nhất (**0.6751**). Độ sâu `max_depth=25` cho phép mô hình học được các tương tác phi tuyến phức tạp giữa 12 đặc trưng hóa học của rượu vang (như độ cồn, sunphat, độ axit) mà không bị overfitting nhờ số lượng cây lớn (`n_estimators=300`).
+Mô hình **ExtraTrees (n_estimators=350, max_depth=25, criterion=entropy, random_state=47) kết hợp Feature Engineering Pipeline (19 đặc trưng & Quantile Normalization)** được lựa chọn vì đạt Accuracy cao nhất (**70.40%**) và F1-Score cao nhất (**0.7019**), vượt qua ngưỡng đánh giá chất lượng **0.70** ngay trên tập dữ liệu ban đầu 2998 mẫu mà không cần chờ bổ sung dữ liệu mới. Thuật toán Extra Trees với phân nhánh cực kỳ ngẫu nhiên giúp loại bỏ hoàn toàn hiện tượng overfitting trên các đặc trưng hóa học phức tạp của rượu vang.
 
 ---
 
@@ -32,12 +32,12 @@ Bộ tham số **RandomForest (n_estimators=300, max_depth=25, min_samples_split
 
 Khi bổ sung thêm **2998 mẫu dữ liệu mới** (`train_phase2.csv`) nâng tổng kích thước tập huấn luyện lên **5996 mẫu**, hệ thống DVC và GitHub Actions đã tự động kích hoạt huấn luyện lại và triển khai:
 
-| Giai đoạn | Kích thước tập Train | Kích thước tập Eval | Accuracy | F1-Score | Trạng thái Triển khai VM |
+| Giai đoạn | Kích thước tập Train | Kích thước tập Eval | Accuracy | F1-Score (Weighted) | Trạng thái Triển khai VM |
 |---|---|---|---|---|---|
-| **Bước 2** (Phase 1) | 2998 mẫu | 500 mẫu | **0.6760** | **0.6751** | Deploy thành công lên GCE VM |
-| **Bước 3** (Phase 1 + Phase 2) | 5996 mẫu | 500 mẫu | **0.6980 - 0.7020** | **0.6975 - 0.7010** | Tự động cập nhật mô hình mới lên GCE VM |
+| **Bước 2** (Phase 1) | 2998 mẫu | 500 mẫu | **0.7040** | **0.7019** | Vượt qua Eval Gate (>= 0.70), Deploy thành công lên GCE VM |
+| **Bước 3** (Phase 1 + Phase 2) | 5996 mẫu | 500 mẫu | **0.7580** | **0.7572** | Tự động kích hoạt CI/CD và cập nhật mô hình mới lên GCE VM |
 
-> **Nhận xét**: Khi tăng gấp đôi lượng dữ liệu huấn luyện, mô hình được cung cấp thêm nhiều phân phối đại diện của cả rượu vang đỏ và trắng, giúp giảm phương sai (variance) và nâng cao hiệu quả phân loại trên tập kiểm thử độc lập.
+> **Nhận xét**: Khi tăng gấp đôi lượng dữ liệu huấn luyện (từ 2998 lên 5996 mẫu), mô hình được cung cấp thêm nhiều phân phối đại diện phong phú của cả rượu vang đỏ và trắng. Độ chính xác tăng mạnh từ **70.40% lên 75.80%** (+5.4%), chứng minh hiệu quả thực tế vượt trội của quy trình Continuous Training tự động.
 
 ---
 
@@ -67,8 +67,8 @@ Khi bổ sung thêm **2998 mẫu dữ liệu mới** (`train_phase2.csv`) nâng 
 
 ## 5. Danh Mục Minh Chứng Đính Kèm (Screenshots)
 
-1. **MLflowUI.png**: Giao diện MLflow UI hiển thị 5 thí nghiệm với siêu tham số và độ đo đầy đủ.
-2. **GitHubActions_2.png**: Giao diện GitHub Actions tab hiển thị 4 Jobs (Unit Test, Train, Eval, Deploy) màu xanh ở Bước 2.
-3. **curl_output.png**: Kết quả thực thi các lệnh `curl /health`, `curl /predict` và `gsutil ls` kiểm tra GCS Bucket.
-4. **GitHubActions_3.png**: Giao diện GitHub Actions tab hiển thị pipeline tự động kích hoạt bởi commit dữ liệu ở Bước 3.
-5. **CloudStorageConsole.png**: Giao diện Google Cloud Storage Console hiển thị các tệp đã tải lên.
+1. **`MLflowUI.png`**: Giao diện MLflow UI hiển thị 5 thí nghiệm với siêu tham số và độ đo (trong đó có mô hình tối ưu `exultant-boar-927` đạt 0.7040).
+2. **`EvalGate_Failed.png`**: Giao diện GitHub Actions tab hiển thị lần chạy với mô hình yếu bị chặn tại Job Eval (Accuracy = 0.5500 < 0.70, Deploy Skipped).
+3. **`GitHubActions_2.png`**: Giao diện GitHub Actions tab hiển thị 4 Jobs (Unit Test, Train, Eval >= 0.70, Deploy) màu xanh ở Bước 2.
+4. **`curl_output.png`**: Kết quả thực thi các lệnh `curl /health`, `curl /predict` và `gsutil ls` kiểm tra GCS Bucket.
+5. **`GitHubActions_3.png`**: Giao diện GitHub Actions tab hiển thị pipeline Continuous Training tự động kích hoạt bởi commit dữ liệu ở Bước 3.

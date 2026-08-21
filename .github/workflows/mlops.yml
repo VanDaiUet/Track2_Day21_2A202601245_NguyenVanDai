@@ -130,7 +130,7 @@ jobs:
           current_acc = float("${{ needs.train.outputs.accuracy }}")
           print(f"Accuracy hien tai cua model moi: {current_acc:.4f}")
 
-          # Nguong danh gia toi thieu cho deploy (chuan rubric 0.70)
+          # Nguong danh gia toi thieu cho deploy (chuan 0.70)
           EVAL_THRESHOLD = 0.70
           if current_acc < EVAL_THRESHOLD:
               raise SystemExit(f"FAILED: accuracy {current_acc:.4f} < {EVAL_THRESHOLD}. Huy deploy.")

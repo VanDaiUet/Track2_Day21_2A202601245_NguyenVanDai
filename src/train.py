@@ -47,22 +47,27 @@ def get_model(params: dict):
     model_type = params.get("model_type", "random_forest")
     model_params = {k: v for k, v in params.items() if k not in ["model_type", "use_feature_engineering"]}
 
+    model_params.setdefault("random_state", 42)
+
     if model_type == "random_forest":
-        base_model = RandomForestClassifier(**model_params, random_state=42)
+        base_model = RandomForestClassifier(**model_params)
     elif model_type == "extra_trees":
-        base_model = ExtraTreesClassifier(**model_params, random_state=42)
+        base_model = ExtraTreesClassifier(**model_params)
     elif model_type == "hist_gradient_boosting":
-        base_model = HistGradientBoostingClassifier(**model_params, random_state=42)
+        base_model = HistGradientBoostingClassifier(**model_params)
     elif model_type == "gradient_boosting":
-        base_model = GradientBoostingClassifier(**model_params, random_state=42)
+        base_model = GradientBoostingClassifier(**model_params)
     elif model_type == "logistic_regression":
-        base_model = LogisticRegression(**model_params, random_state=42, max_iter=1000)
+        model_params.setdefault("max_iter", 1000)
+        base_model = LogisticRegression(**model_params)
     else:
         raise ValueError(f"Khong ho tro model_type: {model_type}")
 
     if use_fe:
+        from sklearn.preprocessing import QuantileTransformer
         return Pipeline([
             ("fe", FunctionTransformer(transform_features)),
+            ("scaler", QuantileTransformer(output_distribution="normal", random_state=42)),
             ("clf", base_model)
         ])
     return base_model
@@ -153,6 +158,10 @@ def train(
 
     # Log vào MLflow một cách an toàn
     try:
+        if "MLFLOW_TRACKING_URI" not in os.environ:
+            mlflow.set_tracking_uri("sqlite:///mlflow.db")
+        mlflow.set_experiment("Wine_Quality_Classification")
+        
         with mlflow.start_run():
             mlflow.log_params(params)
             mlflow.log_metric("accuracy", acc)
