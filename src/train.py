@@ -10,29 +10,63 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier,
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
 
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer
+
 EVAL_THRESHOLD = 0.70
+
+
+def transform_features(X):
+    """
+    Hàm biến đổi 12 đặc trưng ban đầu thành 19 đặc trưng bằng Feature Engineering.
+    Hoạt động với cả numpy array và pandas DataFrame.
+    """
+    if hasattr(X, "values"):
+        X = X.values
+    X = np.asarray(X, dtype=float)
+    if X.ndim == 1:
+        X = X.reshape(1, -1)
+    
+    total_acidity = (X[:, 0] + X[:, 1] + X[:, 2]).reshape(-1, 1)
+    bound_so2 = (X[:, 6] - X[:, 5]).reshape(-1, 1)
+    so2_ratio = (X[:, 5] / (X[:, 6] + 1e-5)).reshape(-1, 1)
+    sugar_alcohol = (X[:, 3] / (X[:, 10] + 1e-5)).reshape(-1, 1)
+    alcohol_density = (X[:, 10] / (X[:, 7] + 1e-5)).reshape(-1, 1)
+    acid_ph = (X[:, 0] / (X[:, 8] + 1e-5)).reshape(-1, 1)
+    sulphate_alcohol = (X[:, 9] * X[:, 10]).reshape(-1, 1)
+    
+    return np.hstack([X, total_acidity, bound_so2, so2_ratio, sugar_alcohol, alcohol_density, acid_ph, sulphate_alcohol])
 
 
 def get_model(params: dict):
     """
-    Khởi tạo mô hình dựa trên tham số model_type (Bonus 2).
+    Khởi tạo mô hình dựa trên tham số model_type (Bonus 2) và use_feature_engineering.
     Mặc định sử dụng random_forest nếu không chỉ định model_type.
     """
+    use_fe = params.get("use_feature_engineering", False)
     model_type = params.get("model_type", "random_forest")
-    model_params = {k: v for k, v in params.items() if k != "model_type"}
+    model_params = {k: v for k, v in params.items() if k not in ["model_type", "use_feature_engineering"]}
 
     if model_type == "random_forest":
-        return RandomForestClassifier(**model_params, random_state=42)
+        base_model = RandomForestClassifier(**model_params, random_state=42)
     elif model_type == "extra_trees":
-        return ExtraTreesClassifier(**model_params, random_state=42)
+        base_model = ExtraTreesClassifier(**model_params, random_state=42)
     elif model_type == "hist_gradient_boosting":
-        return HistGradientBoostingClassifier(**model_params, random_state=42)
+        base_model = HistGradientBoostingClassifier(**model_params, random_state=42)
     elif model_type == "gradient_boosting":
-        return GradientBoostingClassifier(**model_params, random_state=42)
+        base_model = GradientBoostingClassifier(**model_params, random_state=42)
     elif model_type == "logistic_regression":
-        return LogisticRegression(**model_params, random_state=42, max_iter=1000)
+        base_model = LogisticRegression(**model_params, random_state=42, max_iter=1000)
     else:
         raise ValueError(f"Khong ho tro model_type: {model_type}")
+
+    if use_fe:
+        return Pipeline([
+            ("fe", FunctionTransformer(transform_features)),
+            ("clf", base_model)
+        ])
+    return base_model
+
 
 
 
@@ -108,49 +142,51 @@ def train(
     # Bonus 5: Kiểm tra phân phối dữ liệu
     class_distribution = check_data_drift_and_distribution(y_train)
 
-    with mlflow.start_run():
-        # 3. Ghi nhận các siêu tham số vào MLflow
-        mlflow.log_params(params)
+    # 4. Khởi tạo và huấn luyện mô hình
+    model = get_model(params)
+    model.fit(X_train, y_train)
 
-        # 4. Khởi tạo và huấn luyện mô hình
-        model = get_model(params)
-        model.fit(X_train, y_train)
+    # 5. Dự đoán trên tập đánh giá và tính chỉ số
+    preds = model.predict(X_eval)
+    acc = float(accuracy_score(y_eval, preds))
+    f1 = float(f1_score(y_eval, preds, average="weighted"))
 
-        # 5. Dự đoán trên tập đánh giá và tính chỉ số
-        preds = model.predict(X_eval)
-        acc = float(accuracy_score(y_eval, preds))
-        f1 = float(f1_score(y_eval, preds, average="weighted"))
+    # Log vào MLflow một cách an toàn
+    try:
+        with mlflow.start_run():
+            mlflow.log_params(params)
+            mlflow.log_metric("accuracy", acc)
+            mlflow.log_metric("f1_score", f1)
+            for cls, ratio in class_distribution.items():
+                mlflow.log_metric(f"class_ratio_{cls}", ratio)
+            mlflow.sklearn.log_model(model, "model")
+    except Exception as e:
+        print(f"[MLflow Warning] Khong the ghi log vao MLflow: {e}")
 
-        # 6. Ghi nhận chỉ số vào MLflow
-        mlflow.log_metric("accuracy", acc)
-        mlflow.log_metric("f1_score", f1)
-        for cls, ratio in class_distribution.items():
-            mlflow.log_metric(f"class_ratio_{cls}", ratio)
-        
-        mlflow.sklearn.log_model(model, "model")
 
-        # 7. In kết quả ra màn hình
-        print(f"Accuracy: {acc:.4f} | F1: {f1:.4f}")
+    # 7. In kết quả ra màn hình
+    print(f"Accuracy: {acc:.4f} | F1: {f1:.4f}")
 
-        # Bonus 3: Tạo báo cáo chi tiết outputs/report.txt
-        generate_detailed_report(y_eval, preds, output_path="outputs/report.txt")
+    # Bonus 3: Tạo báo cáo chi tiết outputs/report.txt
+    generate_detailed_report(y_eval, preds, output_path="outputs/report.txt")
 
-        # 8. Lưu metrics ra file outputs/metrics.json
-        os.makedirs("outputs", exist_ok=True)
-        metrics_data = {
-            "accuracy": acc,
-            "f1_score": f1,
-            "class_distribution": class_distribution,
-        }
-        with open("outputs/metrics.json", "w", encoding="utf-8") as f:
-            json.dump(metrics_data, f, indent=2)
+    # 8. Lưu metrics ra file outputs/metrics.json
+    os.makedirs("outputs", exist_ok=True)
+    metrics_data = {
+        "accuracy": acc,
+        "f1_score": f1,
+        "class_distribution": class_distribution,
+    }
+    with open("outputs/metrics.json", "w", encoding="utf-8") as f:
+        json.dump(metrics_data, f, indent=2)
 
-        # 9. Lưu mô hình ra file models/model.pkl
-        os.makedirs("models", exist_ok=True)
-        joblib.dump(model, "models/model.pkl")
+    # 9. Lưu mô hình ra file models/model.pkl
+    os.makedirs("models", exist_ok=True)
+    joblib.dump(model, "models/model.pkl")
 
     # 10. Trả về accuracy
     return acc
+
 
 
 if __name__ == "__main__":
